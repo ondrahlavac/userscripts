@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name        Fetch movie details from TMBD by name
-// @version     0.5.1
+// @version     0.5.2
 // @author      Ondra Hlaváč <ondra@hlavac.cz>
 // @description Displays a card with movie info, when hovering over movie name.
 // @namespace   https://ondra.hlavac.cz/
 // @match       https://*.info/browse.php
 // @grant       GM.getValue
-// @license     ISC
+// @license     MIT
 // @run-at      document-end
 // @homepageURL https://github.com/ondrahlavac/userscripts
 // @updateURL   https://github.com/ondrahlavac/userscripts/raw/master/movie-details-on-hover.user.js
