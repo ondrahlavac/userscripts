@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name        YouTube Simple Speed Control
-// @version     0.1.1
+// @version     0.1.2
 // @author      Ondra Hlaváč <ondra@hlavac.cz>
 // @description Adds a simple speed control to YouTube videos.
 // @namespace   https://ondra.hlavac.cz/
 // @match       https://www.youtube.com/watch*
 // @grant       none
-// @license     ISC
+// @license     MIT
 // @run-at      document-end
 // @homepageURL https://github.com/ondrahlavac/userscripts
 // @updateURL   https://github.com/ondrahlavac/userscripts/raw/master/youtube-simple-speed-control.user.js

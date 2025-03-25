@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name        WEDOS - Streamlining payment page
-// @version     2.0.2
+// @version     2.0.3
 // @author      Ondra Hlaváč <ondra@hlavac.cz>
 // @description Preselects your favourite payment method and hides the rest.
 // @namespace   https://ondra.hlavac.cz/
 // @match       https://client.wedos.com/pay/order*
 // @grant       GM.setValue
 // @grant       GM.getValue
-// @license     ISC
+// @license     MIT
 // @run-at      document-end
 // @homepageURL https://github.com/ondrahlavac/userscripts
 // @updateURL   https://github.com/ondrahlavac/userscripts/raw/master/wedos-payment-page-favourites.user.js
