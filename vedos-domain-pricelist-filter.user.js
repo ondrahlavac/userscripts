@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name        Vedos - domain price filter
-// @version     1.1.0
+// @version     1.1.1
 // @author      Ondra Hlavac <ondra@hlavac.cz>
 // @description Adds a max price filter to the domain price list on vedos.cz
 // @namespace   https://ondra.hlavac.cz/
@@ -42,8 +42,6 @@
 
     // Retrieve saved max value or default to maxPrice
     const savedMaxPrice = await GM.getValue('maxPrice', maxPrice);
-    
-    const maxPriceInput = document.getElementById('maxPriceInput');
 
     // Create floating filter UI
     const filterDiv = document.createElement('div');
@@ -70,13 +68,15 @@
     `;
 
     document.body.appendChild(filterDiv);
+    
+    const maxPriceInput = document.getElementById('maxPriceInput');
  
     // Filtering logic
     function filterRows() {
+        const threshold = parseFloat(maxPriceInput.value);
         // save the new value to GM
         GM.setValue('maxPrice', threshold);
-
-        const threshold = parseFloat(maxPriceInput.value);
+        // hide rows with higher prices
         domainPrices.forEach(({row, price}) => {
             row.style.display = price <= threshold ? '' : 'none';
           row.setAttribute('data-debug', `${price} - ${threshold}`);
