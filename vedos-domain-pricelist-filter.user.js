@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name        Vedos - domain price filter
-// @version     1.1.1
+// @version     1.2.0
 // @author      Ondra Hlavac <ondra@hlavac.cz>
 // @description Adds a max price filter to the domain price list on vedos.cz
 // @namespace   https://ondra.hlavac.cz/
@@ -10,8 +10,8 @@
 // @license     MIT
 // @run-at      document-end
 // @homepageURL https://github.com/ondrahlavac/userscripts
-// @updateURL   https://github.com/ondrahlavac/userscripts/raw/master/vedos-domain-pricelist-filter.user.js
-// @downloadURL https://github.com/ondrahlavac/userscripts/raw/master/wedos-domain-pricelist-filter.user.js
+// @updateURL   https://raw.githubusercontent.com/ondrahlavac/userscripts/refs/heads/master/vedos-domain-pricelist-filter.user.js
+// @downloadURL https://raw.githubusercontent.com/ondrahlavac/userscripts/refs/heads/master/vedos-domain-pricelist-filter.user.js
 // @supportURL  https://github.com/ondrahlavac/userscripts/issues
 // ==/UserScript==
 
