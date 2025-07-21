@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         FX Converter to CZK
-// @version      1.2.1
+// @version      1.3.0
 // @author       Ondra Hlavac <ondra@hlavac.cz>
 // @description  Converts EUR, USD, GBP prices on page to CZK on hover using exchange rates, no older than 24 hours
 // @namespace    https://ondra.hlavac.cz/
@@ -29,13 +29,60 @@
 
     const rates = {};
 
+    async function promptForApiKey() {
+        // Create a simple modal dialog
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = 0;
+        overlay.style.left = 0;
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.background = 'rgba(0,0,0,0.4)';
+        overlay.style.zIndex = 99999;
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+
+        const dialog = document.createElement('div');
+        dialog.style.background = '#fff';
+        dialog.style.padding = '24px 32px';
+        dialog.style.borderRadius = '8px';
+        dialog.style.boxShadow = '0 2px 16px rgba(0,0,0,0.3)';
+        dialog.style.textAlign = 'center';
+
+        dialog.innerHTML = `
+            <h2>FX Converter API Key</h2>
+            <p>Please enter your <b>exchangerate.host</b> API token:</p>
+            <input type="text" id="fxApiKeyInput" style="width: 90%; padding: 8px; font-size: 16px;" />
+            <br><br>
+            <button id="fxApiKeySaveBtn" style="padding: 8px 24px; font-size: 16px;">Save</button>
+        `;
+
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+
+        return new Promise(resolve => {
+            document.getElementById('fxApiKeySaveBtn').onclick = async function() {
+                const key = document.getElementById('fxApiKeyInput').value.trim();
+                if (key) {
+                    await GM.setValue('apiKey', key);
+                    document.body.removeChild(overlay);
+                    resolve(key);
+                }
+            };
+        });
+    }
+
     async function fetchRatesCached() {
-        const apiKey = await GM.getValue('apiKey', null);
+        let apiKey = await GM.getValue('apiKey', null);
         const apiCacheKey = 'fx_raw_cache';
 
         if (!apiKey) {
-            console.error('FX Converter', 'No API key set in GM storage under "apiKey".');
-            return;
+            apiKey = await promptForApiKey();
+            if (!apiKey) {
+                console.error('FX Converter', 'No API key provided.');
+                return;
+            }
         }
 
         let rawData = null;
@@ -111,8 +158,8 @@
     }
 
     function convertAndSetTooltip(el, currency, value) {
-        const czk = value * rates[currency];
-        const tooltipText = `≈ ${formatCZK(czk)}`;
+        const czkValue = value * rates[currency];
+        const tooltipText = `≈ ${formatCZK(czkValue)}`;
         el.addEventListener('mouseenter', function(e) {
             let tooltip = document.createElement('span');
             tooltip.textContent = tooltipText;
@@ -129,7 +176,7 @@
             document.body.appendChild(tooltip);
             function moveTooltip(ev) {
                 tooltip.style.left = (ev.clientX + 12) + 'px';
-                tooltip.style.top = (ev.clientY + 12) + 'px';
+                tooltip.style.top = (ev.clientY - 36) + 'px';
             }
             moveTooltip(e);
             el.addEventListener('mousemove', moveTooltip);
@@ -162,6 +209,16 @@
         for (const node of matchingNodes) {
             regex.lastIndex = 0;
             const parent = node.parentNode;
+
+            // If parent is an old fx-converted-to-czk span, unwrap the text node
+            if (parent && parent.classList && parent.classList.contains('fx-converted-to-czk')) {
+                const grandParent = parent.parentNode;
+                if (grandParent) {
+                    grandParent.replaceChild(node, parent);
+                    parent = grandParent;
+                }
+            }
+
             const frag = document.createDocumentFragment();
             let lastIndex = 0;
 
@@ -183,9 +240,10 @@
 
                 const val = normalizePriceNumber(number);
 
-                // Create a minimal wrapper (span) with no extra styling
+                // Create a minimal wrapper (span)
                 const priceNode = document.createElement('span');
                 priceNode.textContent = match[0];
+                priceNode.classList.add('fx-converted-to-czk');
                 convertAndSetTooltip(priceNode, currency, val);
                 frag.appendChild(priceNode);
 
@@ -234,8 +292,42 @@
         return parseFloat(normalized);
     }
 
+    let observer;
+    let debounceTimer = null;
+
+    function debouncedScanAndTagPrices() {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            if (observer) observer.disconnect();
+            scanAndTagPrices();
+            if (observer) observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+                characterData: true
+            });
+        }, 1000);
+    }
+
     fetchRatesCached()
-      .then(scanAndTagPrices)
+      .then(() => {
+          scanAndTagPrices(); // Initial scan and tag
+          observer = new MutationObserver(mutations => {
+              for (const mutation of mutations) {
+                  if (
+                      mutation.type === 'childList' && mutation.addedNodes.length > 0 ||
+                      mutation.type === 'characterData'
+                  ) {
+                      debouncedScanAndTagPrices();
+                      break;
+                  }
+              }
+          });
+          observer.observe(document.body, {
+              childList: true,
+              subtree: true,
+              characterData: true
+          });
+      })
       .catch(err => console.error('FX Converter', 'Failed to initialize FX rates:', err));
 
 })();
