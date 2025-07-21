@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         FX Converter to CZK
-// @version      1.3.0
+// @version      1.5.0
 // @author       Ondra Hlavac <ondra@hlavac.cz>
 // @description  Converts EUR, USD, GBP prices on page to CZK on hover using exchange rates, no older than 24 hours
 // @namespace    https://ondra.hlavac.cz/
