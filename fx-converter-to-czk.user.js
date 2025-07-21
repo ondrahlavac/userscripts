@@ -5,10 +5,16 @@
 // @description  Converts EUR, USD, GBP prices on page to CZK on hover using exchange rates, no older than 24 hours
 // @namespace    https://ondra.hlavac.cz/
 // @match        *://*/*
-// @grant        GM_xmlhttpRequest
+// @grant        GM.xmlhttpRequest
 // @grant        GM.getValue
 // @grant        GM.setValue
 // @connect      api.exchangerate.host
+// @license      MIT
+// @run-at       document-end
+// @homepageURL  https://github.com/ondrahlavac/userscripts
+// @updateURL    https://raw.githubusercontent.com/ondrahlavac/userscripts/refs/heads/master/fx-converter-to-czk.user.js
+// @downloadURL  https://raw.githubusercontent.com/ondrahlavac/userscripts/refs/heads/master/fx-converter-to-czk.user.js
+// @supportURL   https://github.com/ondrahlavac/userscripts/issues
 // ==/UserScript==
 
 (function() {
@@ -53,7 +59,7 @@
 
             try {
                 const response = await new Promise((resolve, reject) => {
-                    GM_xmlhttpRequest({
+                    GM.xmlhttpRequest({
                         method: 'GET',
                         url: url,
                         onload: r => resolve(r),
@@ -98,9 +104,7 @@
         };
 
         Object.assign(rates, newRates);
-
     }
-
 
     function formatCZK(value) {
         return value.toLocaleString('cs-CZ', { style: 'currency', currency: 'CZK', minimumFractionDigits: 2 });
@@ -108,17 +112,54 @@
 
     function convertAndSetTooltip(el, currency, value) {
         const czk = value * rates[currency];
-        el.setAttribute('title', `≈ ${formatCZK(czk)}`);
+        const tooltipText = `≈ ${formatCZK(czk)}`;
+        el.addEventListener('mouseenter', function(e) {
+            let tooltip = document.createElement('span');
+            tooltip.textContent = tooltipText;
+            tooltip.className = 'fx-czk-tooltip';
+            tooltip.style.position = 'fixed';
+            tooltip.style.zIndex = '9999';
+            tooltip.style.background = '#222';
+            tooltip.style.color = '#fff';
+            tooltip.style.padding = '2px 8px';
+            tooltip.style.borderRadius = '4px';
+            tooltip.style.fontSize = '12px';
+            tooltip.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+            tooltip.style.pointerEvents = 'none';
+            document.body.appendChild(tooltip);
+            function moveTooltip(ev) {
+                tooltip.style.left = (ev.clientX + 12) + 'px';
+                tooltip.style.top = (ev.clientY + 12) + 'px';
+            }
+            moveTooltip(e);
+            el.addEventListener('mousemove', moveTooltip);
+            el._fxCzkTooltip = { tooltip, moveTooltip };
+        });
+        el.addEventListener('mouseleave', function() {
+            if (el._fxCzkTooltip) {
+                document.body.removeChild(el._fxCzkTooltip.tooltip);
+                el.removeEventListener('mousemove', el._fxCzkTooltip.moveTooltip);
+                el._fxCzkTooltip = null;
+            }
+        });
     }
 
     function scanAndTagPrices() {
-        const regex = /\b(?<code1>EUR|USD|GBP)\s?(?<num1>-?\d{1,3}(?:[., ]?\d{3})*(?:[.,]\d+)?)|(?<num2>-?\d{1,3}(?:[., ]?\d{3})*(?:[.,]\d+)?)\s?(?<code2>EUR|USD|GBP)|(?<sym>[$€£])\s?(?<num3>-?\d{1,3}(?:[., ]?\d{3})*(?:[.,]\d+)?)/gi;
+        const regex = /(?:(?<code1>EUR|USD|GBP)\s*(?<num1>-?\d{1,3}(?:[.,\s]?\d{3})*(?:[.,]\d+)?))|(?:(?<num2>-?\d{1,3}(?:[.,\s]?\d{3})*(?:[.,]\d+)?)\s*(?<code2>EUR|USD|GBP))|(?:(?<sym>[$€£])\s*(?<num3>-?\d{1,3}(?:[.,\s]?\d{3})*(?:[.,]\d+)?))/gi;
 
+        // Collect only matching text nodes
+        const matchingNodes = [];
         const treeWalker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
         while (treeWalker.nextNode()) {
             const node = treeWalker.currentNode;
-            if (!regex.test(node.nodeValue)) continue;
+            if (regex.test(node.nodeValue)) {
+                matchingNodes.push(node);
+            }
+            regex.lastIndex = 0; // Reset for next test
+        }
 
+        // Now process only matching nodes
+        for (const node of matchingNodes) {
             regex.lastIndex = 0;
             const parent = node.parentNode;
             const frag = document.createDocumentFragment();
@@ -140,24 +181,58 @@
                     number = match.groups.num2;
                 }
 
-            const val = parseFloat(number.replace(/,/g, '').replace(/ /g, '').replace(/([^\d.])/g, ''));
+                const val = normalizePriceNumber(number);
 
-            const span = document.createElement('span');
-            span.textContent = match[0];
-            span.style.borderBottom = '1px dotted gray';
-            span.style.cursor = 'help';
-            convertAndSetTooltip(span, currency, val);
-            frag.appendChild(span);
+                // Create a minimal wrapper (span) with no extra styling
+                const priceNode = document.createElement('span');
+                priceNode.textContent = match[0];
+                convertAndSetTooltip(priceNode, currency, val);
+                frag.appendChild(priceNode);
 
-            lastIndex = match.index + match[0].length;
+                lastIndex = match.index + match[0].length;
+            }
+
+            const after = node.nodeValue.slice(lastIndex);
+            if (after) frag.appendChild(document.createTextNode(after));
+
+            parent.replaceChild(frag, node);
         }
-
-        const after = node.nodeValue.slice(lastIndex);
-        if (after) frag.appendChild(document.createTextNode(after));
-
-        parent.replaceChild(frag, node);
     }
-}
+
+    function normalizePriceNumber(number) {
+        let normalized = number.replace(/\s/g, '');
+        if (normalized.includes('.') && normalized.includes(',')) {
+            // Find last separator (comma or dot)
+            const lastComma = normalized.lastIndexOf(',');
+            const lastDot = normalized.lastIndexOf('.');
+            let decimalSep, thousandSep;
+            if (lastComma > lastDot) {
+                decimalSep = ',';
+                thousandSep = '.';
+            } else {
+                decimalSep = '.';
+                thousandSep = ',';
+            }
+            // Remove all thousand separators
+            normalized = normalized.replace(new RegExp('\\' + thousandSep, 'g'), '');
+            // Replace decimal separator with dot
+            normalized = normalized.replace(new RegExp('\\' + decimalSep), '.');
+        } else {
+            // If only comma, treat as decimal if after thousands
+            if (normalized.includes(',')) {
+                // If comma is after 3 digits from end, treat as decimal
+                const commaPos = normalized.lastIndexOf(',');
+                if (normalized.length - commaPos - 1 === 2) {
+                    normalized = normalized.replace(/,/g, '.');
+                } else {
+                    normalized = normalized.replace(/,/g, '');
+                }
+            }
+            // Remove any other non-digit except dot and minus
+            normalized = normalized.replace(/[^\d.-]/g, '');
+        }
+        return parseFloat(normalized);
+    }
 
     fetchRatesCached()
       .then(scanAndTagPrices)
