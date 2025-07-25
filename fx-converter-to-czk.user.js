@@ -20,11 +20,12 @@
 (function() {
     'use strict';
 
-    const currencies = ['EUR', 'USD', 'GBP'];
+    const currencies = ['EUR', 'USD', 'GBP', 'DKK'];
     const currencySymbols = {
         '€': 'EUR',
         '$': 'USD',
-        '£': 'GBP'
+        '£': 'GBP',
+        'kr': 'DKK'
     };
 
     const rates = {};
@@ -138,18 +139,17 @@
         // Extract the conversion rates from rawData.quotes
         const q = rawData.quotes;
 
-        if (!q.USDCZK || !q.USDEUR || !q.USDGBP) {
+        if (!q.USDCZK || !q.USDEUR || !q.USDGBP || !q.USDDKK) {
             console.error('FX Converter', 'Required currency quotes missing from response.', rawData);
             return;
         }
-
         const usdToCzk = q.USDCZK;
         const newRates = {
             'USD': usdToCzk,
             'EUR': usdToCzk / q.USDEUR,
-            'GBP': usdToCzk / q.USDGBP
+            'GBP': usdToCzk / q.USDGBP,
+            'DKK': usdToCzk / q.USDDKK
         };
-
         Object.assign(rates, newRates);
     }
 
@@ -192,7 +192,14 @@
     }
 
     function scanAndTagPrices() {
-        const regex = /(?:(?<code1>EUR|USD|GBP)\s*(?<num1>-?\d{1,3}(?:[.,\s]?\d{3})*(?:[.,]\d+)?))|(?:(?<num2>-?\d{1,3}(?:[.,\s]?\d{3})*(?:[.,]\d+)?)\s*(?<code2>EUR|USD|GBP))|(?:(?<sym>[$€£])\s*(?<num3>-?\d{1,3}(?:[.,\s]?\d{3})*(?:[.,]\d+)?))/gi;
+        const regex = new RegExp(
+            [
+                '(?:(?<code1>EUR|USD|GBP|DKK)\\s*(?<num1>-?\\d{1,3}(?:[.,\\s]?\\d{3})*(?:[.,]\\d+)?))',
+                '(?:(?<num2>-?\\d{1,3}(?:[.,\\s]?\\d{3})*(?:[.,]\\d+)?)\\s*(?<code2>EUR|USD|GBP|DKK))',
+                '(?:(?<sym>[\\$€£kr])\\s*(?<num3>-?\\d{1,3}(?:[.,\\s]?\\d{3})*(?:[.,]\\d+)?))'
+            ].join('|'),
+            'gi'
+        );
 
         // Collect only matching text nodes
         const matchingNodes = [];
