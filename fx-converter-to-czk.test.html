@@ -9,11 +9,20 @@
       margin: 2rem;
       line-height: 1.6;
     }
+    .products-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2rem;
+      justify-content: flex-start;
+    }
     .product {
       border: 1px solid #ddd;
       padding: 1rem;
       margin-bottom: 1.5rem;
-      max-width: 400px;
+      flex: 1 1 calc(33.33% - 2rem); /* 3 columns, space for gap */
+      box-sizing: border-box;
+      max-width: calc(33.33% - 2rem);
+      min-width: 250px;         /* optional: controls collapse on small screens */
     }
     .product img {
       width: 100%;
@@ -28,10 +37,11 @@
 <body>
   <h1>Mock Product Catalog</h1>
 
+  <div class="products-grid">
   <div class="product">
     <h2>Red Running Shoes</h2>
     <img src="https://placehold.co/300x200?text=Shoes" alt="Red Shoes">
-    <p>High performance running shoes with breathable mesh. Price: <span class="price">€89.99</span></p>
+    <p>High performance $90 running shoes with breathable mesh. Price: <span class="price">€89.99</span></p>
   </div>
   
   <div class="product">
@@ -61,10 +71,66 @@
   <div class="product">
     <h2>Premium Office Chair</h2>
     <img src="https://placehold.co/300x200?text=Chair" alt="Office Chair">
-    <p>Ergonomic design, adjustable height, and lumbar support. Price: <span class="price">€1,049.00 EUR</span></p>
+    <p>Ergonomic design, could cost USD100 or USD200, adjustable height, and lumbar support. Price: <span class="price">€1,049.00 EUR</span></p>
+  </div>
+
   </div>
 
   <hr>
   <p>All products above are examples for testing currency conversion scripts. Text and prices are fictional.</p>
+  <div class="test-product">
+    <span class="price">120 EUR</span>
+  </div>
+
+<script>
+const priceRegex = new RegExp(
+  [
+    '(?:(?<code1>EUR|USD|GBP|DKK)\\s*(?<num1>-?\\d{1,3}(?:[.,\\s]?\\d{3})*(?:[.,]\\d+)?))',
+    '(?:(?<num2>-?\\d{1,3}(?:[.,\\s]?\\d{3})*(?:[.,]\\d+)?)\\s*(?<code2>EUR|USD|GBP|DKK))',
+    '(?:(?<sym>[\\$€£kr])\\s*(?<num3>-?\\d{1,3}(?:[.,\\s]?\\d{3})*(?:[.,]\\d+)?))'
+  ].join('|'),
+  'i'
+);
+
+function randomDigitExcept(original) {
+  let digit;
+  do {
+    digit = Math.floor(Math.random() * 9) + 1;
+  } while (digit == original);
+  return digit;
+}
+
+function changeRandomDigitInPriceString(priceString) {
+  const digitIndices = [];
+  for (let i = 0; i < priceString.length; ++i) {
+    if (/\d/.test(priceString[i])) {
+      digitIndices.push(i);
+    }
+  }
+  if (digitIndices.length === 0) return priceString;
+  const randomIndex = digitIndices[Math.floor(Math.random() * digitIndices.length)];
+  const oldDigit = priceString[randomIndex];
+  const newDigit = randomDigitExcept(oldDigit);
+  return priceString.slice(0, randomIndex) + newDigit + priceString.slice(randomIndex + 1);
+}
+
+setInterval(() => {
+  const priceSpans = document.querySelectorAll('.price');
+  if (priceSpans.length === 0) return;
+
+  const randomSpan = priceSpans[Math.floor(Math.random() * priceSpans.length)];
+  // Work on the full HTML for preservation of markup
+  const origHtml = randomSpan.innerHTML;
+  const match = origHtml.match(priceRegex);
+  if (!match) return;
+
+  const originalPrice = match[0];
+  const newPrice = changeRandomDigitInPriceString(originalPrice);
+  // Only replace the first occurrence! (in case there are multiple price matches)
+  randomSpan.innerHTML = newPrice;
+
+}, 3000);
+</script>
 </body>
 </html>
+

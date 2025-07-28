@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         FX Converter to CZK
-// @version      1.5.0
+// @version      2.0.0
 // @author       Ondra Hlavac <ondra@hlavac.cz>
-// @description  Converts EUR, USD, GBP prices on page to CZK on hover using exchange rates, no older than 24 hours
+// @description  Converts EUR, USD, GBP and DKK prices on page to CZK on hover using exchange rates, no older than 24 hours
 // @namespace    https://ondra.hlavac.cz/
 // @match        *://*/*
 // @grant        GM.xmlhttpRequest
@@ -29,6 +29,14 @@
     };
 
     const rates = {};
+    const priceRegex = new RegExp(
+        [
+            '(?:(?<code1>EUR|USD|GBP|DKK)\\s*(?<num1>-?\\d{1,3}(?:[.,\\s]?\\d{3})*(?:[.,]\\d+)?))',
+            '(?:(?<num2>-?\\d{1,3}(?:[.,\\s]?\\d{3})*(?:[.,]\\d+)?)\\s*(?<code2>EUR|USD|GBP|DKK))',
+            '(?:(?<sym>[\\$€£kr])\\s*(?<num3>-?\\d{1,3}(?:[.,\\s]?\\d{3})*(?:[.,]\\d+)?))'
+        ].join('|'),
+        'gi'
+    );
 
     async function promptForApiKey() {
         // Create a simple modal dialog
@@ -157,82 +165,81 @@
         return value.toLocaleString('cs-CZ', { style: 'currency', currency: 'CZK', minimumFractionDigits: 2 });
     }
 
-    function convertAndSetTooltip(el, currency, value) {
-        const czkValue = value * rates[currency];
-        const tooltipText = `≈ ${formatCZK(czkValue)}`;
-        el.addEventListener('mouseenter', function(e) {
-            let tooltip = document.createElement('span');
-            tooltip.textContent = tooltipText;
-            tooltip.className = 'fx-czk-tooltip';
-            tooltip.style.position = 'fixed';
-            tooltip.style.zIndex = '9999';
-            tooltip.style.background = '#222';
-            tooltip.style.color = '#fff';
-            tooltip.style.padding = '2px 8px';
-            tooltip.style.borderRadius = '4px';
-            tooltip.style.fontSize = '12px';
-            tooltip.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
-            tooltip.style.pointerEvents = 'none';
-            document.body.appendChild(tooltip);
-            function moveTooltip(ev) {
-                tooltip.style.left = (ev.clientX + 12) + 'px';
-                tooltip.style.top = (ev.clientY - 36) + 'px';
-            }
-            moveTooltip(e);
-            el.addEventListener('mousemove', moveTooltip);
-            el._fxCzkTooltip = { tooltip, moveTooltip };
+    function createTooltip(tooltipText) {
+        const tooltipElement = document.createElement('span');
+        tooltipElement.textContent = tooltipText;
+        tooltipElement.className = 'fx-czk-tooltip';
+        Object.assign(tooltipElement.style, {
+            position: 'fixed',
+            zIndex: '9999',
+            background: '#222',
+            color: '#fff',
+            padding: '2px 8px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+            pointerEvents: 'none',
+            display: 'none' // Initially hidden
         });
-        el.addEventListener('mouseleave', function() {
-            if (el._fxCzkTooltip) {
-                document.body.removeChild(el._fxCzkTooltip.tooltip);
-                el.removeEventListener('mousemove', el._fxCzkTooltip.moveTooltip);
-                el._fxCzkTooltip = null;
-            }
-        });
+        return tooltipElement;
+    }
+
+    function moveTooltip(tooltipElement, ev) {
+        tooltipElement.style.left = (ev.clientX + 12) + 'px';
+        tooltipElement.style.top = (ev.clientY - 36) + 'px';
     }
 
     function scanAndTagPrices() {
-        const regex = new RegExp(
-            [
-                '(?:(?<code1>EUR|USD|GBP|DKK)\\s*(?<num1>-?\\d{1,3}(?:[.,\\s]?\\d{3})*(?:[.,]\\d+)?))',
-                '(?:(?<num2>-?\\d{1,3}(?:[.,\\s]?\\d{3})*(?:[.,]\\d+)?)\\s*(?<code2>EUR|USD|GBP|DKK))',
-                '(?:(?<sym>[\\$€£kr])\\s*(?<num3>-?\\d{1,3}(?:[.,\\s]?\\d{3})*(?:[.,]\\d+)?))'
-            ].join('|'),
-            'gi'
-        );
-
-        // Collect only matching text nodes
-        const matchingNodes = [];
-        const treeWalker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-        while (treeWalker.nextNode()) {
-            const node = treeWalker.currentNode;
-            if (regex.test(node.nodeValue)) {
-                matchingNodes.push(node);
-            }
-            regex.lastIndex = 0; // Reset for next test
-        }
-
-        // Now process only matching nodes
-        for (const node of matchingNodes) {
-            regex.lastIndex = 0;
-            const parent = node.parentNode;
-
-            // If parent is an old fx-converted-to-czk span, unwrap the text node
-            if (parent && parent.classList && parent.classList.contains('fx-converted-to-czk')) {
-                const grandParent = parent.parentNode;
-                if (grandParent) {
-                    grandParent.replaceChild(node, parent);
-                    parent = grandParent;
+        // using a TreeWalker to find only the text nodes that match our regex
+        const treeWalker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: function(node) {
+                    // don't traverse into script and style tags
+                    if (node.parentNode.nodeName === 'SCRIPT' || node.parentNode.nodeName === 'STYLE') {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    // regex is stateful because of the /g flag, so we must reset it.
+                    priceRegex.lastIndex = 0;
+                    if (priceRegex.test(node.nodeValue)) {
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                    return NodeFilter.FILTER_SKIP;
                 }
             }
+        );
+
+        // collect all nodes to process in an array beforehand, to avoid issues with live NodeList
+        const nodesToProcess = [];
+        while (treeWalker.nextNode()) {
+            nodesToProcess.push(treeWalker.currentNode);
+        }
+        
+        // now we're done with the TreeWalker -> we can process the nodes
+        for (const node of nodesToProcess) {
+            priceRegex.lastIndex = 0;
+            let parent = node.parentNode;
+
+                // if parent of the text node is our span.fx-converted-to-czk from previous run,
+                // we need to get rid of it
+                // TODO: however, if the value did not change, maybe we can just skip it and not touch it
+                if (parent && parent.classList && parent.classList.contains('fx-converted-to-czk')) {
+                    const grandParent = parent.parentNode;
+                    if (grandParent) {
+                        grandParent.replaceChild(node, parent);
+                        parent = grandParent;
+                    }
+                }
 
             const frag = document.createDocumentFragment();
             let lastIndex = 0;
 
-            for (const match of node.nodeValue.matchAll(regex)) {
+            for (const match of node.nodeValue.matchAll(priceRegex)) {
                 const before = node.nodeValue.slice(lastIndex, match.index);
                 if (before) frag.appendChild(document.createTextNode(before));
 
+                // This is where we determine the currency and number
                 let currency, number;
                 if (match.groups.sym) {
                     currency = currencySymbols[match.groups.sym];
@@ -246,12 +253,23 @@
                 }
 
                 const val = normalizePriceNumber(number);
-
+                const czkValue = val * rates[currency];
+                
                 // Create a minimal wrapper (span)
                 const priceNode = document.createElement('span');
                 priceNode.textContent = match[0];
                 priceNode.classList.add('fx-converted-to-czk');
-                convertAndSetTooltip(priceNode, currency, val);
+                priceNode.dataset.czkValue = czkValue.toFixed(2);
+                const tooltipElement = createTooltip(`≈ ${formatCZK(czkValue)}`);
+                priceNode.addEventListener('mouseenter', (e) => {
+                    tooltipElement.style.display = 'block';
+                    document.addEventListener('mousemove', (ev) => moveTooltip(tooltipElement, ev));
+                });
+                priceNode.addEventListener('mouseleave', (e) => {
+                    document.removeEventListener('mousemove', (ev) => moveTooltip(tooltipElement, ev));
+                    tooltipElement.style.display = 'none';
+                });
+                priceNode.appendChild(tooltipElement);
                 frag.appendChild(priceNode);
 
                 lastIndex = match.index + match[0].length;
@@ -299,36 +317,37 @@
         return parseFloat(normalized);
     }
 
-    let observer;
-    let debounceTimer = null;
-
-    function debouncedScanAndTagPrices() {
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-            if (observer) observer.disconnect();
-            scanAndTagPrices();
-            if (observer) observer.observe(document.body, {
-                childList: true,
-                subtree: true,
-                characterData: true
-            });
-        }, 1000);
-    }
-
-    fetchRatesCached()
-      .then(() => {
-          scanAndTagPrices(); // Initial scan and tag
-          observer = new MutationObserver(mutations => {
+    const observer = new MutationObserver(mutations => {
               for (const mutation of mutations) {
-                  if (
+                if (
                       mutation.type === 'childList' && mutation.addedNodes.length > 0 ||
                       mutation.type === 'characterData'
-                  ) {
-                      debouncedScanAndTagPrices();
+                ) {
+                      throttledScanAndTagPrices();
                       break;
                   }
               }
           });
+
+    let lastExecutionTime = 0;
+    function throttledScanAndTagPrices() {
+        const now = Date.now();
+        if (now - lastExecutionTime >= 1000) {
+            lastExecutionTime = now;
+            observer.disconnect();
+            scanAndTagPrices();
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+                characterData: true
+            });
+        }
+    }
+
+    // Initialize the script
+    fetchRatesCached()
+      .then(() => {
+          scanAndTagPrices(); // Initial scan and tag
           observer.observe(document.body, {
               childList: true,
               subtree: true,
